@@ -1,49 +1,30 @@
-name: CI/CD Pipeline for Node.js App
+name: EC2 Deployment Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
 
 jobs:
-  build-and-test:
-    name: Build and Test
+  deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set Up Node.js
-        uses: actions/setup-node@v3
+      - name: SSH Deployment
+        uses: appleboy/ssh-action@v1.0.7
         with:
-          node-version: 18
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Tests
-        run: echo "No tests yet"
-
-      - name: Build Application
-        run: echo "No build step for now"
-
-  deploy-to-aws:
-    name: Deploy to AWS EC2
-    needs: build-and-test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.3
-        with:
-          host: ${{ secrets.AWS_EC2_HOST }}
-          username: ubuntu
+          host: "3.25.116.172"  # Your EC2 IP
+          username: "ubuntu"     # Ubuntu default username
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          timeout: 30s
+          script_stop: true
+          use_insecure_cipher: true  # Required for RSA compatibility
+          cipher: aes128-cbc
           script: |
+            # Deployment commands
             cd ~/app
             git pull origin main
-            npm install --production
+            npm ci --production
             pm2 restart all || pm2 start npm -- start
