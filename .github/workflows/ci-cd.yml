@@ -1,4 +1,4 @@
-name: EC2 Deployment Pipeline
+name: AWS EC2 Deployment Pipeline
 
 on:
   push:
@@ -6,12 +6,13 @@ on:
 
 env:
   NODE_ENV: production
+  AWS_REGION: ap-southeast-2
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # Required for AWS credentials
+      id-token: write
       contents: read
 
     steps:
@@ -23,45 +24,60 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-southeast-2  # Update region if needed
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Access
+        run: |
+          echo "AWS Credentials Verification:"
+          aws sts get-caller-identity
+          echo "\nEC2 Instance Status:"
+          aws ec2 describe-instances \
+            --instance-ids i-0035f31ff388d5572 \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text
 
       - name: SSH Deployment
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.EC2_HOST || '3.25.116.172' }}  # Corrected secret name
+          host: ${{ secrets.EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # Corrected secret name
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           timeout: 60s
-          command_timeout: 15m
           script_stop: true
-          debug: true
           envs: CI=true
           script: |
-            set -ex  # Enable debugging and exit on error
-            echo "=== SYSTEM MAINTENANCE ==="
+            #!/bin/bash
+            set -e  # Exit immediately on error
+            
+            # System updates
+            echo "=== System Maintenance ==="
             sudo apt-get update -y
             sudo apt-get upgrade -y --auto-remove
 
-            echo "=== APPLICATION DEPLOYMENT ==="
+            # Application deployment
+            echo "\n=== Deploying Application ==="
             cd ~/app || exit 1
-            git fetch origin
+            git fetch origin main
             git reset --hard origin/main
             git clean -fd
 
-            echo "=== DEPENDENCY INSTALLATION ==="
+            # Dependency management
+            echo "\n=== Installing Dependencies ==="
             npm ci --production --omit=dev --audit=false
 
-            echo "=== PROCESS MANAGEMENT ==="
+            # Process management
+            echo "\n=== Managing Application Process ==="
             pm2 flush
             pm2 reload all --update-env || pm2 start npm --name "app" -- start
 
-            echo "=== DEPLOYMENT SUCCESS ==="
+            echo "\n Deployment Successful"
 
-      - name: Verify Deployment
+      - name: Post-Deployment Verification
         run: |
-          echo "🛠️ Validating deployment health..."
+          echo "🔄 Checking application health..."
           ssh -o StrictHostKeyChecking=no \
-              -i ${{ secrets.SSH_PRIVATE_KEY }} \
-              ubuntu@${{ secrets.EC2_HOST || '3.25.116.172' }} \
-              "pm2 list && curl -sfS http://localhost:3000/health"
+            -i ${{ secrets.SSH_PRIVATE_KEY }} \
+            ubuntu@${{ secrets.EC2_HOST }} \
+            "curl -sSf http://localhost:3000/health"
+          echo "\n🚀 Deployment Verified Successfully"
