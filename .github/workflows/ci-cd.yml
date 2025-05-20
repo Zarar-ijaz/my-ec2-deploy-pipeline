@@ -6,78 +6,36 @@ on:
 
 env:
   NODE_ENV: production
-  AWS_REGION: ap-southeast-2
+  AWS_REGION: ap-southeast-2  # Update your region
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify AWS Access
-        run: |
-          echo "AWS Credentials Verification:"
-          aws sts get-caller-identity
-          echo "\nEC2 Instance Status:"
-          aws ec2 describe-instances \
-            --instance-ids i-0035f31ff388d5572 \
-            --query 'Reservations[0].Instances[0].State.Name' \
-            --output text
-
-      - name: SSH Deployment
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           timeout: 60s
-          script_stop: true
-          envs: CI=true
           script: |
-            #!/bin/bash
-            set -e  # Exit immediately on error
+            # System setup
+            sudo apt update -y
             
-            # System updates
-            echo "=== System Maintenance ==="
-            sudo apt-get update -y
-            sudo apt-get upgrade -y --auto-remove
-
-            # Application deployment
-            echo "\n=== Deploying Application ==="
-            cd ~/app || exit 1
-            git fetch origin main
-            git reset --hard origin/main
-            git clean -fd
-
-            # Dependency management
-            echo "\n=== Installing Dependencies ==="
-            npm ci --production --omit=dev --audit=false
-
-            # Process management
-            echo "\n=== Managing Application Process ==="
-            pm2 flush
-            pm2 reload all --update-env || pm2 start npm --name "app" -- start
-
-            echo "\n Deployment Successful"
-
-      - name: Post-Deployment Verification
-        run: |
-          echo "🔄 Checking application health..."
-          ssh -o StrictHostKeyChecking=no \
-            -i ${{ secrets.SSH_PRIVATE_KEY }} \
-            ubuntu@${{ secrets.EC2_HOST }} \
-            "curl -sSf http://localhost:3000/health"
-          echo "\n🚀 Deployment Verified Successfully"
+            # App deployment
+            cd ~/app
+            git pull origin main
+            npm ci --production
+            pm2 restart all
