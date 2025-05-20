@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+env:
+  NODE_ENV: production
+  AWS_REGION: ap-southeast-2
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -11,15 +15,31 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.AWS_EC2_HOST }}  # MUST match GitHub secret name exactly
+          host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "Deploying to EC2..."
+            # System updates
+            sudo apt update -y
+            
+            # App deployment
             cd ~/app
             git pull origin main
-            npm ci --production
-            pm2 restart all
+            npm ci --production --audit=false
+            
+            # Process management
+            if pm2 list | grep -q "app"; then
+              pm2 reload app --update-env
+            else
+              pm2 start npm --name "app" -- start
+            fi
