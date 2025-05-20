@@ -27,15 +27,23 @@ jobs:
       - name: Build Application
         run: echo "No build step for now"
 
-  deploy:
-    name: Simulated Deployment
+  deploy-to-aws:
+    name: Deploy to AWS EC2
     needs: build-and-test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Simulate Deploy
-        run: |
-          echo "Starting deployment..."
-          echo "Pulling latest code"
-          echo "Restarting server (simulated)"
-          echo "✅ Deployment successful (simulated)"
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v0.1.3
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/app
+            git pull origin main
+            npm install --production
+            pm2 restart all || pm2 start npm -- start
