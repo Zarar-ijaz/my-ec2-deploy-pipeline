@@ -1,0 +1,41 @@
+name: CI/CD Pipeline for Node.js App
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        run: echo "No tests yet"
+
+      - name: Build Application
+        run: echo "No build step for now"
+
+  deploy:
+    name: Simulated Deployment
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Simulate Deploy
+        run: |
+          echo "Starting deployment..."
+          echo "Pulling latest code"
+          echo "Restarting server (simulated)"
+          echo "✅ Deployment successful (simulated)"
